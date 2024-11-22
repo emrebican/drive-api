@@ -5,26 +5,33 @@ import {
   listFolderImages,
   uploadImage,
 } from "./api/googleDrive";
+import { ImageList } from "./components/ImageList";
+import { Button, Flex } from "antd";
 
-const FOLDER_ID = "<YOUR_FOLDER_ID>"; // Replace with your folder ID
-
-// npm install googleapis gapi-script
+const FOLDER_ID = import.meta.env.VITE_FOLDER_ID;
 
 const App: React.FC = () => {
   const [images, setImages] = useState<any[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Check if user is already authenticated
+  const checkAuthStatusInGapi = async () => {
+    try {
+      await initializeGapiClient();
+      const authInstance = gapi.auth2.getAuthInstance();
+      const isSignedIn = authInstance.isSignedIn.get();
+      setIsAuthenticated(isSignedIn);
+      if (isSignedIn) {
+        fetchImages();
+      }
+    } catch (error) {
+      console.error("Error initializing GAPI:", error);
+    }
+  };
 
   useEffect(() => {
-    const initGapi = async () => {
-      try {
-        await initializeGapiClient();
-        setIsAuthenticated(true);
-        fetchImages();
-      } catch (error) {
-        console.error("Error initializing GAPI:", error);
-      }
-    };
-    initGapi();
+    checkAuthStatusInGapi();
   }, []);
 
   const fetchImages = async () => {
@@ -35,13 +42,22 @@ const App: React.FC = () => {
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
+      console.log("Uploading file:", file);
+
       await uploadImage(FOLDER_ID, file);
+      fileInputRef.current!.value = ""; // Clear file input
       fetchImages(); // Refresh images after upload
     }
   };
 
-  const handleLogin = () => {
-    gapi.auth2.getAuthInstance().signIn();
+  const handleLogin = async () => {
+    try {
+      await gapi.auth2.getAuthInstance().signIn();
+      setIsAuthenticated(true);
+      fetchImages();
+    } catch (error) {
+      console.error("Error login:", error);
+    }
   };
 
   const handleLogout = () => {
@@ -51,29 +67,25 @@ const App: React.FC = () => {
 
   return (
     <div>
-      <h1>Google Drive Image Gallery</h1>
+      <h1>Google Drive Api</h1>
       {!isAuthenticated ? (
-        <button onClick={handleLogin}>Login with Google</button>
+        <Button variant="outlined" onClick={handleLogin}>
+          Login with Google
+        </Button>
       ) : (
         <>
-          <button onClick={handleLogout}>Logout</button>
-          <input type="file" accept="image/*" onChange={handleUpload} />
-          <div style={{ display: "flex", flexWrap: "wrap" }}>
-            {images.map((image) => (
-              <div key={image.id} style={{ margin: "10px" }}>
-                <img
-                  src={image.thumbnailLink}
-                  alt={image.name}
-                  style={{
-                    width: "150px",
-                    height: "150px",
-                    objectFit: "cover",
-                  }}
-                />
-                <p>{image.name}</p>
-              </div>
-            ))}
-          </div>
+          <Flex align="center" wrap gap="small" style={{ margin: "1rem 0" }}>
+            <Button variant="outlined" onClick={handleLogout}>
+              Logout
+            </Button>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              ref={fileInputRef}
+              onChange={handleUpload}
+            />
+          </Flex>
+          <ImageList imageFiles={images} />
         </>
       )}
     </div>
